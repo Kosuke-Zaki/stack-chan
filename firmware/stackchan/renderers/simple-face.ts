@@ -1,5 +1,6 @@
 import { RendererBase, Layer, type FacePartFactory, type FaceContext } from 'renderer-base'
 import { createBlinkModifier, createBreathModifier, createSaccadeModifier } from 'modifier'
+import { createDizzySwirlDecorator } from 'decorator'
 
 // Renderers
 export const createEyelidPart: FacePartFactory<{
@@ -42,6 +43,18 @@ export const createEyelidPart: FacePartFactory<{
         path.rect(x, y, w, h * 0.6)
         path.rect(x, y + height * 0.6, w, height * 0.4)
         break
+      case 'DOUBTFUL':
+        // 片目だけ疑わしそうに細める（leftのみ大きく閉じる）
+        path.rect(x, y, w, side === 'left' ? height * 0.6 + h * 0.4 : h)
+        break
+      case 'COLD':
+        // 寒さでぎゅっと目を細める
+        path.rect(x, y, w, height * 0.75 + h * 0.25)
+        break
+      case 'HOT':
+        // 暑さでうんざりした半目
+        path.rect(x, y, w, height * 0.45 + h * 0.55)
+        break
       default:
         path.rect(x, y, w, h)
     }
@@ -54,11 +67,16 @@ export const createEyePart: FacePartFactory<{
   side: keyof FaceContext['eyes']
 }> =
   ({ cx, cy, radius = 8, side }) =>
-  (_tick, path, { eyes }) => {
+  (_tick, path, { eyes, emotion }) => {
+    if (emotion === 'DIZZY') {
+      // ぐるぐる目はDizzySwirlデコレータが描画するため、通常の瞳は描かない
+      return
+    }
     const eye = eyes[side]
     const offsetX = (eye.gazeX ?? 0) * 2
     const offsetY = (eye.gazeY ?? 0) * 2
-    path.arc(cx + offsetX, cy + offsetY, radius, 0, 2 * Math.PI)
+    const r = emotion === 'SURPRISED' ? radius * 1.6 : radius
+    path.arc(cx + offsetX, cy + offsetY, r, 0, 2 * Math.PI)
   }
 
 export const createMouthPart: FacePartFactory<{
@@ -121,6 +139,16 @@ export class Renderer extends RendererBase {
         side: 'right',
         width: 24,
         height: 24,
+      })
+    )
+
+    this.addDecorator(
+      createDizzySwirlDecorator({
+        eyes: [
+          { cx: 90, cy: 93 },
+          { cx: 230, cy: 96 },
+        ],
+        radius: 12,
       })
     )
   }

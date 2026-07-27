@@ -27,6 +27,8 @@ export const Emotion = Object.freeze({
   DOUBTFUL: 'DOUBTFUL',
   COLD: 'COLD',
   HOT: 'HOT',
+  SURPRISED: 'SURPRISED',
+  DIZZY: 'DIZZY',
 })
 
 export type Emotion = typeof Emotion[keyof typeof Emotion]

@@ -40,46 +40,6 @@ export const createBalloonDecorator: FaceDecoratorFactory<
   }
 }
 
-/**
- * emotionが'DIZZY'のときだけ、目の位置に渦巻き（ぐるぐる目）を描画する。
- * それ以外のemotionでは何もしない（通常の瞳描画=simple-faceのcreateEyePartを妨げないため）。
- */
-export const createDizzySwirlDecorator: FaceDecoratorFactory<{
-  eyes: { cx: number; cy: number }[]
-  radius?: number
-}> = ({ eyes, radius = 12 }) => {
-  const box = 2 * (radius + 6)
-  let angle = 0
-  return (tick, poco, face, end = false) => {
-    if (end || face.emotion !== 'DIZZY') return
-    angle += tick / 150
-    const fg = poco.makeColor(...face.theme.primary)
-    const bg = poco.makeColor(...face.theme.secondary)
-    const turns = 1.5
-    const steps = 14
-    for (const { cx, cy } of eyes) {
-      const x = cx - box / 2
-      const y = cy - box / 2
-      poco.begin(x, y, box, box)
-      poco.fillRectangle(bg, x, y, box, box)
-      const path = new Outline.CanvasPath()
-      for (let i = 0; i <= steps; i++) {
-        const a = angle + (i / steps) * turns * 2 * Math.PI
-        const r = (i / steps) * radius
-        const px = cx + r * Math.cos(a)
-        const py = cy + r * Math.sin(a)
-        if (i === 0) {
-          path.moveTo(px, py)
-        } else {
-          path.lineTo(px, py)
-        }
-      }
-      poco.blendOutline(fg, 255, Outline.stroke(path, 2), 0, 0)
-      poco.end()
-    }
-  }
-}
-
 export const createBubbleDecorator: FaceDecoratorFactory<{
   x: number
   y: number

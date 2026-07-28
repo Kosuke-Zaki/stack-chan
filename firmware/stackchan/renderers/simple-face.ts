@@ -1,19 +1,6 @@
 import { RendererBase, Layer, type FacePartFactory, type FaceContext } from 'renderer-base'
 import { createBlinkModifier, createBreathModifier, createSaccadeModifier } from 'modifier'
-
-/**
- * ぐるぐる目（DIZZY）用の渦巻き座標を1回だけ計算しておく（毎フレームtrig計算しない）。
- * 対話中(TTS)と同時に動かすと処理落ちしたため、常時回転させず固定形状にしている。
- */
-function buildSpiralOffsets(radius: number, turns = 1.5, steps = 8): { x: number; y: number }[] {
-  const offsets = []
-  for (let i = 0; i <= steps; i++) {
-    const a = (i / steps) * turns * 2 * Math.PI
-    const r = (i / steps) * radius
-    offsets.push({ x: r * Math.cos(a), y: r * Math.sin(a) })
-  }
-  return offsets
-}
+import { createDizzySwirlDecorator } from 'decorator'
 
 // Renderers
 export const createEyelidPart: FacePartFactory<{
@@ -78,29 +65,19 @@ export const createEyePart: FacePartFactory<{
   cy: number
   radius?: number
   side: keyof FaceContext['eyes']
-}> = ({ cx, cy, radius = 8, side }) => {
-  const spiralOffsets = buildSpiralOffsets(radius)
-  return (_tick, path, { eyes, emotion }) => {
+}> =
+  ({ cx, cy, radius = 8, side }) =>
+  (_tick, path, { eyes, emotion }) => {
+    if (emotion === 'DIZZY') {
+      // ぐるぐる目はDizzySwirlデコレータが描画するため、通常の瞳は描かない
+      return
+    }
     const eye = eyes[side]
     const offsetX = (eye.gazeX ?? 0) * 2
     const offsetY = (eye.gazeY ?? 0) * 2
-    if (emotion === 'DIZZY') {
-      // 固定の渦巻き形を描くだけ（回転させない。処理負荷を抑えるため）
-      const baseX = cx + offsetX
-      const baseY = cy + offsetY
-      spiralOffsets.forEach(({ x, y }, i) => {
-        if (i === 0) {
-          path.moveTo(baseX + x, baseY + y)
-        } else {
-          path.lineTo(baseX + x, baseY + y)
-        }
-      })
-      return
-    }
     const r = emotion === 'SURPRISED' ? radius * 1.6 : radius
     path.arc(cx + offsetX, cy + offsetY, r, 0, 2 * Math.PI)
   }
-}
 
 export const createMouthPart: FacePartFactory<{
   cx: number
@@ -162,6 +139,16 @@ export class Renderer extends RendererBase {
         side: 'right',
         width: 24,
         height: 24,
+      })
+    )
+
+    this.addDecorator(
+      createDizzySwirlDecorator({
+        eyes: [
+          { cx: 90, cy: 93 },
+          { cx: 230, cy: 96 },
+        ],
+        radius: 12,
       })
     )
   }

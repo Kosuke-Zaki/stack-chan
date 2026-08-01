@@ -18,12 +18,13 @@
         "./manifest_typings.json"
     ],
     "modules": {
-        "*": [
-            "./touch",
-            "./robot",
-            "./main"
-        ],
-        "default-mods/*": "./default-mods/*"
+    "*": [
+        "./touch",
+        "./robot",
+        "./memory-status",
+        "./main"
+    ],
+    "default-mods/*": "./default-mods/*"
     },
     "preload": [
         "robot",
@@ -67,14 +68,29 @@
         ]
     },
     "platforms": {
-        "esp32/m5stack_cores3": {
-            "config": {
-                "tts": {
-                    "sampleRate": 24000
-                },
-                "rotation": 0,
-                "virtualButton": true
+    "esp32/m5stack_cores3": {
+        "creation": {
+            "static": 0,
+            "chunk": {
+                "initial": 1048576,
+                "incremental": 0
+            },
+            "heap": {
+                "initial": 32768,
+                "incremental": 0
+            },
+            "stack": 1024,
+            "keys": {
+                "available": 512
             }
+        },
+        "config": {
+            "tts": {
+                "sampleRate": 24000
+            },
+            "rotation": 0,
+            "virtualButton": true
         }
     }
+}
 }

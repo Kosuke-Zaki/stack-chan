@@ -14,6 +14,21 @@ import { NetworkService } from 'network-service'
 import Touch from 'touch'
 import { loadPreferences, asyncWait } from 'stackchan-util'
 import TextDecoder from 'text/decoder'
+import getMemoryStatus from 'memory-status'
+
+function printMemoryStatus(label: string): void {
+  const memory = getMemoryStatus()
+
+  trace(`\n--- Memory: ${label} ---\n`)
+  trace(`PSRAM initialized: ${memory.psramInitialized}\n`)
+  trace(`PSRAM total:       ${memory.psramTotal}\n`)
+  trace(`PSRAM free:        ${memory.psramFree}\n`)
+  trace(`PSRAM minimum:     ${memory.psramMinimum}\n`)
+  trace(`PSRAM largest:     ${memory.psramLargest}\n`)
+  trace(`Internal free:     ${memory.internalFree}\n`)
+  trace(`Internal minimum:  ${memory.internalMinimum}\n`)
+  trace(`DMA free:          ${memory.dmaFree}\n`)
+}
 
 function createRobot() {
   const decoder = new TextDecoder()
@@ -87,19 +102,32 @@ async function checkAndConnectWiFi() {
 
 async function main() {
   await asyncWait(100)
+
+  printMemoryStatus('startup')
+
   await checkAndConnectWiFi().catch((msg) => {
     trace(`WiFi connection failed: ${msg}`)
   })
+
+  printMemoryStatus('after WiFi')
+
   let { onRobotCreated, onLaunch } = defaultMod
   if (Modules.has('mod')) {
     const mod = Modules.importNow('mod') as StackchanMod
     onRobotCreated = mod.onRobotCreated ?? onRobotCreated
     onLaunch = mod.onLaunch ?? onLaunch
   }
+
   const shouldRobotCreate = await onLaunch?.()
+
   if (shouldRobotCreate !== false) {
     const robot = createRobot()
+
+    printMemoryStatus('after robot creation')
+
     await onRobotCreated?.(robot, globalThis.device)
+
+    printMemoryStatus('after launch')
   }
 }
 

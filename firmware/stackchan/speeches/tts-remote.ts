@@ -2,7 +2,7 @@
 import AudioOut from 'pins/audioout'
 import WavStreamer from 'wavstreamer'
 import calculatePower from 'calculate-power'
-
+import getMemoryStatus from 'memory-status'
 /* global trace, SharedArrayBuffer */
 
 declare const device: any
@@ -15,6 +15,17 @@ export type TTSProperty = {
   sampleRate?: number
 }
 let streamer
+
+function printMemoryStatus(label: string): void {
+  const memory = getMemoryStatus()
+
+  trace(`\n--- Memory: ${label} ---\n`)
+  trace(`PSRAM free:        ${memory.psramFree}\n`)
+  trace(`PSRAM minimum:     ${memory.psramMinimum}\n`)
+  trace(`Internal free:     ${memory.internalFree}\n`)
+  trace(`Internal minimum:  ${memory.internalMinimum}\n`)
+  trace(`DMA free:          ${memory.dmaFree}\n`)
+}
 
 export class TTS {
   streamer?: WavStreamer
@@ -32,11 +43,15 @@ export class TTS {
   }
   async stream(key: string): Promise<void> {
     const { onPlayed, onDone, audio } = this
+  
+    printMemoryStatus('remote TTS before stream')
+  
     return new Promise((resolve, reject) => {
       if (streamer != null) {
         reject(new Error('already playing'))
         return
       }
+  
       streamer = new WavStreamer({
         http: device.network.http,
         host: this.host,
@@ -47,28 +62,38 @@ export class TTS {
           out: audio,
           stream: 0,
         },
+  
         onPlayed(buffer) {
           const power = calculatePower(buffer)
           onPlayed?.(power)
         },
+  
         onReady(state) {
           trace(`Ready: ${state}\n`)
+  
           if (state) {
+            printMemoryStatus('remote TTS playback start')
             audio.start()
           } else {
             audio.stop()
           }
         },
+  
         onError(e) {
           trace('ERROR: ', e, '\n')
+          printMemoryStatus('remote TTS error')
+  
           streamer = undefined
           reject(new Error('unknown error occured'))
         },
+  
         onDone() {
           trace('DONE\n')
           streamer?.close()
           streamer = undefined
           onDone?.()
+  
+          printMemoryStatus('remote TTS after stream')
           resolve()
         },
       })

@@ -1,5 +1,5 @@
 import Timer from 'timer'
-import { Vector3, Pose, Rotation, Maybe, noop, randomBetween } from 'stackchan-util'
+import { Vector3, Pose, Rotation, Maybe, noop, randomBetween, type MotionOptions } from 'stackchan-util'
 import { type FaceContext, type Emotion, createFaceContext, FaceDecorator } from 'renderer-base'
 import Digital from 'embedded:io/digital'
 import Touch from 'touch'
@@ -16,7 +16,7 @@ const INTERVAL_POSE = 1000 / 10
  * The Driver for the actuator
  */
 export type Driver = {
-  applyRotation: (ori: Rotation, time?: number) => Promise<void>
+  applyRotation: (ori: Rotation, options?: MotionOptions) => Promise<void>
   getRotation: () => Promise<Maybe<Rotation>>
   setTorque: (torque: boolean) => Promise<void>
   onAttached?: () => void
@@ -30,6 +30,7 @@ export type TTS = {
   stream: (text: string) => Promise<void>
   onPlayed: (volume: number) => void
   onDone: () => void
+  setSpeakerId?: (speakerId: number) => void
 }
 
 /**
@@ -91,6 +92,7 @@ export class Robot {
   #renderer: Renderer
   #paused: boolean
   #faceContext: FaceContext
+  #lastFaceUpdateMs: number
   #emotion: Emotion
   #updatePoseHandler: Timer
   #updateFaceHandler: Timer
@@ -151,6 +153,7 @@ export class Robot {
     this.#updateFaceHandler = Timer.repeat(this.updateFace.bind(this), INTERVAL_FACE)
     this.#paused = false
     this.#faceContext = createFaceContext()
+    this.#lastFaceUpdateMs = Date.now()
   }
 
   /**
@@ -169,6 +172,7 @@ export class Robot {
     }
     this.#tts.onDone = () => {
       this.#power = 0
+      this.#faceContext.mouth.open = 0
     }
   }
 
@@ -315,8 +319,8 @@ export class Robot {
    * @returns void when the robot start moving
    * @experimental
    */
-  async setPose(pose: Pose, time?: number): Promise<void> {
-    return this.#driver.applyRotation(pose.rotation, time)
+  async setPose(pose: Pose, options?: MotionOptions): Promise<void> {
+    return this.#driver.applyRotation(pose.rotation, options)
   }
 
   /**
@@ -350,6 +354,17 @@ export class Robot {
     this.#emotion = emotion
   }
 
+  /**
+   * Set the mouth open ratio directly.
+   * Used for PC-driven mouth-flap/lip-sync (device TTS drives mouth.open via
+   * #power in updateFace() instead; this is for when speech audio plays elsewhere).
+   *
+   * @param open - open ratio [0-1]
+   */
+  setMouthOpen(open: number): void {
+    this.#faceContext.mouth.open = Math.min(Math.max(open, 0), 1)
+  }
+
   get driver(): Driver {
     return this.#driver
   }
@@ -368,6 +383,8 @@ export class Robot {
 
   resume() {
     this.#paused = false
+    // pause中に経過した時間をtickの飛び越しとして扱わないようにリセットする
+    this.#lastFaceUpdateMs = Date.now()
   }
   /**
    * Update the robot face.
@@ -378,8 +395,18 @@ export class Robot {
     if (this.#paused) {
       return
     }
+    // Timer.repeatの呼び出し間隔はシステム負荷で揺れるため、名目上の
+    // INTERVAL_FACEではなく実測の経過時間をtickとしてrendererへ渡す。
+    // そうしないと呼吸・瞬き・視線移動・ぐるぐる目などtickベースのアニメーションが
+    // 実時間とずれて速く見えたり遅く見えたりする。
+    const now = Date.now()
+    const elapsedMs = Math.min(Math.max(now - this.#lastFaceUpdateMs, 0), INTERVAL_FACE * 4)
+    this.#lastFaceUpdateMs = now
     if (this.#power != 0) {
-      this.#faceContext.mouth.open = Math.min(this.#power / 2000, 1.0)
+      this.#faceContext.mouth.open = Math.min(
+        Math.max(this.#power / 2000, 0),
+        1.0
+      )
     }
     this.#faceContext.emotion = this.#emotion
     if (this.#gazePoint != null) {
@@ -397,7 +424,7 @@ export class Robot {
         eye.gazeY = Math.cos(p)
       }
     }
-    this.#renderer.update(INTERVAL_FACE, this.#faceContext)
+    this.#renderer.update(elapsedMs, this.#faceContext)
   }
 
   /**
@@ -426,7 +453,7 @@ export class Robot {
         this.#isMoving = true
         const time = randomBetween(0.5, 1.0)
         await this.#driver.setTorque(true)
-        await this.#driver.applyRotation(Rotation.fromVector3(this.#gazePoint), time)
+        await this.#driver.applyRotation(Rotation.fromVector3(this.#gazePoint))
         Timer.set(async () => {
           await this.#driver.setTorque(false)
           this.#isMoving = false
